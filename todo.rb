@@ -76,7 +76,7 @@ def error_for_todo(name)
 end
 
 def load_list(id)
-  list = session[:lists][id] if id && session[:lists][index]
+  list = session[:lists][id] if id && session[:lists][id]
   return list if list
   
   session[:error] = "The specified list was not found."
