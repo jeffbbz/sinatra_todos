@@ -29,8 +29,8 @@ helpers do
   def sort_lists(lists, &block)
     complete, incomplete = lists.partition { |list| list_complete?(list) }
 
-    incomplete.each { |list| yield list, lists.index(list) }
-    complete.each { |list| yield list, lists.index(list) }
+    incomplete.each(&block)
+    complete.each(&block)
   end
 
   def sort_todos(todos, &block)
@@ -76,11 +76,21 @@ def error_for_todo(name)
 end
 
 def load_list(id)
-  list = session[:lists][id] if id && session[:lists][id]
+  list = session[:lists].find { |list| list[:id] == id }
   return list if list
   
   session[:error] = "The specified list was not found."
   redirect '/lists'
+end
+
+def next_todo_id(todos)
+  max = todos.map { |todo| todo[:id] }.max || 0
+  max + 1
+end
+
+def next_element_id(elements)
+  max = elements.map { |element| element[:id] }.max || 0
+  max + 1
 end
 
 # Create a new list
@@ -92,7 +102,8 @@ post '/lists' do
     session[:error] = error
     erb :new_list, layout: :layout
   else
-    session[:lists] << { name: list_name, todos: [] }
+    id = next_element_id(session[:lists])
+    session[:lists] << { id: id, name: list_name, todos: [] }
     session[:success] = 'The list has been created.'
     redirect '/lists'
   end
@@ -100,8 +111,10 @@ end
 
 # View Todos on a Single List
 get '/lists/:id' do
-  @list_id = params[:id].to_i
-  @list = load_list(@list_id)
+  id = params[:id].to_i
+  @list = load_list(id)
+  @list_id = @list[:id]
+  @todos = @list[:todos]
   erb :list, layout: :layout
 end
 
@@ -132,18 +145,13 @@ end
 # Delete Existing To-Do List
 post '/lists/:id/delete' do
   id = params[:id].to_i
-  list = session[:lists].delete_at(id)
+  session[:lists].reject! { |list| list[:id] == id }
+  session[:success] = "The list has been deleted."
   if env["HTTP_X_REQUESTED_WITH"] == "XMLHttpRequest"
     '/lists'
   else
-    session[:success] = "The list '#{list[:name]}' has been deleted."
     redirect '/lists'
   end
-end
-
-def next_todo_id(todos)
-  max = todos.map { |todo| todo[:id] }.max || 0
-  max + 1
 end
 
 # Add Todos to a List
@@ -158,7 +166,7 @@ post '/lists/:list_id/todos' do
     session[:error] = error
     erb :list, layout: :layout
   else
-    id = next_todo_id(@list[:todos])
+    id = next_element_id(@list[:todos])
     @list[:todos] << {id: id, name: todo_name, completed: false}
     
     session[:success] = "The todo has been added."
@@ -172,12 +180,12 @@ post '/lists/:list_id/todos/:id/delete' do
   @list = load_list(@list_id)
   
   todo_id = params[:id].to_i
-  deleted_todo = @list[:todos].reject! { |todo| todo[:id] == todo_id }
+  @list[:todos].reject! { |todo| todo[:id] == todo_id }
+  session[:success] = "The todo has been deleted."
 
   if env["HTTP_X_REQUESTED_WITH"] == "XMLHttpRequest"
     status 204
   else
-    session[:success] = "The todo '#{deleted_todo[:name]}' has been deleted."
     redirect "/lists/#{@list_id}"
   end
 end
